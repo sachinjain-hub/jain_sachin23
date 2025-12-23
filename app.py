@@ -13,7 +13,6 @@ from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, SubmitField
 from wtforms.validators import DataRequired, Email
 
-from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 import bcrypt
 import qrcode
@@ -575,5 +574,6 @@ def logout():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
+
 
 
