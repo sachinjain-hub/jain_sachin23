@@ -1,69 +1,69 @@
+import os
+import random
+import io
+import base64
+from uuid import uuid4
+from datetime import datetime, timedelta, timezone
+
 from flask import (
-    Flask,
-    render_template,
-    redirect,
-    url_for,
-    flash,
-    request,
-    session
+    Flask, render_template, redirect,
+    url_for, flash, request, session
 )
 from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, SubmitField
 from wtforms.validators import DataRequired, Email
+
+from flask_sqlalchemy import SQLAlchemy
+from flask_migrate import Migrate
 import bcrypt
-from flask_mysqldb import MySQL
-import random
-import os 
-# === NEW IMPORTS FOR QR ===
 import qrcode
-import io
-import base64
-from uuid import uuid4
-from datetime import datetime, timedelta
-
-# Twilio import
 from twilio.rest import Client
-
+# APP CONFIG
+# =====================================================
 app = Flask(__name__)
 
-# ================== MYSQL CONFIG ==================
-app.config['MYSQL_HOST'] = os.environ.get('MYSQL_HOST', 'localhost')
-app.config['MYSQL_USER'] = os.environ.get('MYSQL_USER', 'root')
-app.config['MYSQL_PASSWORD'] = os.environ.get('MYSQL_PASSWORD', 'root')
-app.config['MYSQL_DB'] = os.environ.get('MYSQL_DB', 'minor')
+# ---------- SECRET & SESSION ----------
+app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev")
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(minutes=30)
+app.config["SESSION_COOKIE_SAMESITE"] = "None"
+app.config["SESSION_COOKIE_SECURE"] = True
+DATABASE_URL = os.environ.get("DATABASE_URL")
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL is not set")
 
-# Flask-WTF / Session secret key
-app.secret_key = 'sk'
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://")
 
-mysql = MySQL(app)
+app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_URL
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+
+db = SQLAlchemy(app)
+migrate = Migrate(app, db)
 
 # ================== TWILIO CONFIG ==================
-import os
 
-TWILIO_ACCOUNT_SID = "ACef09fee467f8cc7d96450a643b1b143f"
-TWILIO_AUTH_TOKEN = "06aac32ab3b568383d5765c8fd75e145"
-TWILIO_FROM_NUMBER = "+13412446292"
+TWILIO_ACCOUNT_SID = os.environ.get("TWILIO_ACCOUNT_SID")
+TWILIO_AUTH_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN")
+TWILIO_FROM_NUMBER = os.environ.get("TWILIO_FROM_NUMBER")
 
+twilio_client = None
+if all([TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER]):
+    twilio_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+else:
+    print("⚠️ Twilio disabled (env variables missing)")
 
 twilio_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
 
 
-def send_sms(phone, message):
-    """
-    Send SMS using Twilio.
-    `phone` must be in E.164 format: e.g. +91XXXXXXXXXX
-    """
-    try:
-        twilio_client.messages.create(
-            body=message,
-            from_=TWILIO_FROM_NUMBER,
-            to=phone
-        )
-        print(f"SMS sent to {phone}: {message}")
-    except Exception as e:
-        # App crash na ho, bas log print ho jaye
-        print("Twilio SMS error:", e)
+class User(db.Model):
+    __tablename__ = "users"
 
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(120), nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    password = db.Column(db.String(255), nullable=False)
+    parents_phone = db.Column(db.String(20), nullable=False)
+    role = db.Column(db.String(20), default="student")
 
 
 # ============== QR HELPER ==============
@@ -572,5 +572,8 @@ def logout():
 
 
 # ================== MAIN ==================
-if __name__ == '__main__':
-    app.run(debug=True)
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
+
+
